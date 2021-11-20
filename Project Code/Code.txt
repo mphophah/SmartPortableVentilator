@@ -1,0 +1,228 @@
+#define BLYNK_PRINT Serial // Blynk cloud communication
+#include <ESP8266WiFi.h> // library for intergrading esp8266 to arduino ide
+#include <BlynkSimpleEsp8266.h>
+#include <Servo.h>  // Controlling servo motor
+#include <Wire.h>   //  library for I2C protocol
+#include <LiquidCrystal_I2C.h>  // library for I2C LCD
+
+//Get LCD library object
+LiquidCrystal_I2C lcd(0x27,16,2);  
+
+//unique key to connect to the Blynk
+char auth[] = "itiQ9xAuIvA6KyfEG6scNfA3SU1cv7Na";
+
+// WiFi credentials.
+// Wifi name and password for the network.
+char ssid[] = "12345";
+char pass[] = "@Mphoza20";
+
+//Servo motor object
+Servo myservo; 
+
+//Application buttons status virables
+int level1;
+int level2;
+int level3;
+
+//Application vitual pins
+#define VPIN_BUTTON_1    V1
+#define VPIN_BUTTON_2    V2
+#define VPIN_BUTTON_3    V3
+
+//physical inputs and outputs
+int Button1 = D6;
+int Button2 = D7;
+int Button3 = D8;
+int Buzzer = D5;
+
+
+//heart rate sensor stored virables
+int PulseSensorPurplePin = 0;
+String Signal="";
+int Threshold = 550;
+
+//Setup controls and Internet connctions
+void setup()
+{
+  //Setting LED, Buttons and Buzzer as inputs and outputs 
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(Button1, INPUT);
+  pinMode(Button2, INPUT);
+  pinMode(Button3, INPUT);
+  pinMode(Buzzer, OUTPUT);
+
+  //Attaching the pin the servor motor is connected
+  myservo.attach(D7);
+  
+  // Debug console
+  Serial.begin(9600);
+
+  //Starting LCD Display 
+  lcd.begin(16,2);
+  lcd.init();
+  lcd.backlight();
+
+  //Connecting to the Blynk Cloud service
+  Blynk.begin(auth, ssid, pass);
+
+}
+
+//Send data to the Blynk cloud patform(representing heart rate sensor)
+BLYNK_READ(V5)
+{
+  
+  if(digitalRead(Button1)==HIGH)
+  {
+    Blynk.virtualWrite(V5,50);
+  }
+  else if(digitalRead(Button2)==HIGH)
+  {
+    Blynk.virtualWrite(V5,75);
+  }
+  else if(digitalRead(Button3)==HIGH)
+  {
+    Blynk.virtualWrite(V5,100);
+  }else{
+    Blynk.virtualWrite(V5,0);
+  }
+  
+}
+
+//Send data to the Blynk Cloud platform(representing stages of the system)
+BLYNK_READ(V4)
+{
+  
+  if(level1==1)
+  {
+    Blynk.virtualWrite(V4,1);
+  }
+  else if(level2==1)
+  {
+    Blynk.virtualWrite(V4,2);
+  }
+  else if(level3==1)
+  {
+    Blynk.virtualWrite(V4,3);
+  }
+  else{
+    Blynk.virtualWrite(V4,0);
+  }
+  
+}
+
+//Get Mobile application Buttons Status from the Blynk platform
+BLYNK_WRITE(VPIN_BUTTON_1)
+{
+  level1 = param.asInt();  
+}
+BLYNK_WRITE(VPIN_BUTTON_2)
+{
+  level2 = param.asInt();  
+}
+BLYNK_WRITE(VPIN_BUTTON_3)
+{
+  level3 = param.asInt();  
+}
+
+//Runtime operation  of the system
+void loop()
+{
+  //Intergrade the Blynk Library to arduino 
+  Blynk.run();
+
+  //heart rate sensor data tracking
+  Signal = "0%";
+  String Display = "";
+
+  //Status of the Physical Buttons that represent the sensor 
+  int button1Status = digitalRead(Button1);
+  int button2Status = digitalRead(Button2);
+  int button3Status = digitalRead(Button3);
+  String SystemStatus ="";
+
+  //Print data to the first line of the LCD
+  lcd.setCursor(0,0);
+  lcd.print("Vendilator On");
+
+  //Stage 1 operation, where the systems povide low air pressure
+  if(level1 == 1 && level2 == 0 && level3 == 0)
+  {
+    if(button1Status ==HIGH)
+    {
+      Signal ="50%";
+    }
+  
+    digitalWrite(LED_BUILTIN, HIGH);
+    
+    SystemStatus = "LOW";
+    
+    Display = "BPM:"+String(Signal);
+
+    
+    lcd.setCursor(0,1);
+    lcd.print(SystemStatus+" "+Display);
+
+    //run the servo motor
+    myservo.write(0);             
+    delay(2000);                     
+    myservo.write(180);              
+    delay(2000); 
+    
+  }
+  // Stage 2 operation, where the system provide normal air pressure
+  else if(level2 == 1 && level1 == 0 && level3 == 0)
+  {
+     if(button2Status ==HIGH)
+     {
+       Signal ="75%";
+     }
+    
+    SystemStatus = "Normal";
+    Display = "BPM:"+String(Signal);
+    
+    lcd.setCursor(0,1);
+    lcd.print(SystemStatus+" "+Display);
+    
+    digitalWrite(LED_BUILTIN, HIGH);
+
+    //run the servo motor
+    myservo.write(0);             
+    delay(1000);                     
+    myservo.write(180);              
+    delay(1000);
+                          
+  } 
+  // Stage 3 operation, where the system provide high air pressure
+  else if(level3 == 1 && level1 == 0 && level2 == 0)
+  {
+    if(button3Status ==HIGH)
+    {
+    Signal ="100%";
+    digitalWrite(Buzzer,HIGH);
+    }else{
+       digitalWrite(Buzzer,LOW);
+    }
+      
+    SystemStatus = "HIGH";
+    Display = "BPM:"+String(Signal);
+  
+    lcd.setCursor(0,1);
+    lcd.print(SystemStatus+" "+Display);
+    
+    digitalWrite(LED_BUILTIN, HIGH);
+
+    //run the servo motor
+    myservo.write(0);             
+    delay(500);                     
+    myservo.write(180);              
+    delay(500);
+                         
+  } 
+  //Turn the system off
+  else {
+    myservo.write(0);
+  }
+
+  //Clear LCD Data
+  lcd.clear();
+}
